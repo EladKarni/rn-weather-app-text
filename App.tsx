@@ -1,17 +1,46 @@
 import React from 'react';
-import { StyleSheet, Text, View, Button } from 'react-native';
+import { StyleSheet, Text, View, Button, Alert } from 'react-native';
 import * as BackgroundFetch from 'expo-background-fetch';
 import * as TaskManager from 'expo-task-manager';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Location from 'expo-location';
 
 const BACKGROUND_FETCH_TASK = 'background-fetch';
+const openWeatherKey = `<Open Weather Map API>`;
+const url = `https://api.openweathermap.org/data/2.5/onecall?&units=imperial&exclude=minutely&appid=${openWeatherKey}`;
 
 // 1. Define the task by providing a name and the function that should be executed
 // Note: This needs to be called in the global scope (e.g outside of your React components)
 TaskManager.defineTask(BACKGROUND_FETCH_TASK, async () => {
-  const now = Date.now();
+  const storeData = async (value) => {
+    try {
+      await AsyncStorage.setItem('@storage_Key', value)
+    } catch (e) {
+      Alert.alert(`Error saving data: ${value}`);
+    }
+  }
+  const loadForecast = async () => {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission to access location was denied');
+    }
 
-  console.log(`Got background fetch call at date: ${new Date(now).toISOString()}`);
+    const location = await Location.getCurrentPositionAsync();
 
+    const response = await fetch(
+      `${url}&lat=${location.coords.latitude}&lon=${location.coords.longitude}`
+    );
+    const data = await response.json();
+
+    if (!response.ok) {
+      Alert.alert(`Error retrieving weather data: ${data.message}`);
+    } else {
+      await storeData(data.current.temp)
+      console.log("storing temp as: ", data.current.temp);
+    }
+  };
+
+  console.log(`storing temp: `, );
   // Be sure to return the successful result type!
   return BackgroundFetch.BackgroundFetchResult.NewData;
 });
@@ -20,7 +49,7 @@ TaskManager.defineTask(BACKGROUND_FETCH_TASK, async () => {
 // Note: This does NOT need to be in the global scope and CAN be used in your React components!
 async function registerBackgroundFetchAsync() {
   return BackgroundFetch.registerTaskAsync(BACKGROUND_FETCH_TASK, {
-    minimumInterval: 60 * 0.5, // 15 minutes
+    minimumInterval: 5, // 30 minutes
     stopOnTerminate: false, // android only,
     startOnBoot: true, // android only
   });
